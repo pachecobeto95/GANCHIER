@@ -118,14 +118,6 @@ def matchImages_FLANN(des_request, des_cache):
 
 	return False
 
-
-
-	return False
-
-
-
-
-
 def sendImg(url: str, imgFile, fileName: str) -> dict:
 	"""
 	This function sends raw image to the cloud. 
