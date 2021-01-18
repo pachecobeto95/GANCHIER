@@ -1,6 +1,7 @@
 from flask import jsonify, session, current_app as app
 import cv2, os, pickle, requests, sys, config, time
 import numpy as np, json
+from .edgeCache import DescriptorsMatcher
 
 """
 Tasks:
@@ -12,6 +13,9 @@ Tasks:
 
 """
 
+dscptsMatcher = DescriptorsMatcher(config.FLANN_MAX_DISTANCE, config.FLANN_MIN_FREQUENCY, 
+config.FLANN_INDEX_PARAMS, config.FLANN_SEARCH_PARAMS)
+
 def imageRecognition(fileImg)-> dict:
 	"""
 	This function must receive an image, extract feature using ORB or SIFT, verify a possible match.
@@ -19,28 +23,34 @@ def imageRecognition(fileImg)-> dict:
 	Otherwise, it sends the raw data to the cloud server.  
 	"""
 	try:
-		cloud_url = "%s/api/cloud/image_recognition"%(config.URL_CLOUD)
+		#cloud_url = "%s/api/cloud/image_recognition"%(config.URL_CLOUD)
+
 		imgPath = os.path.join(config.SAVE_IMAGES_PATH_EDGE, fileImg.filename)
 		img = cv2.imread(imgPath)
 
 		
-		keypoint, descriptor = extractFeatureByOrb(img)
+		_, descriptor = extractFeatureByOrb(img)
 
-		match = matchImages_BF_Matcher(descriptor, descriptor)
+		matches = dscptsMatcher.match(descriptor)
 
-		if (match):
+		#we always return the matched images
+		result = {'ordered_matches': matches}
+		#if there were too few matches we consider it a fail and add the image to cache
+
+		if len(matches)>= 3: 
 			# HERE: we need something to return information to user. Return image name or something
 			# The information provided to the user is extracted from cache image. 
 			# THe matched cache image provide us some nformation to return to user or even the image
-			pass 
-
+			pass
 		else:
 			#This line is run, when any image matching is found. 
-			result = sendImg(cloud_url, imgPath, fileImg.filename)
+			dscptsMatcher.add((descriptor,fileImg.filename))
+			#result = sendImg(cloud_url, imgPath, fileImg.filename)
 
 		
 		#return result
-		return {'status': 'ok'}
+		result['status'] = 'ok'
+		return result
 	except Exception as e:
 		print(e.args)
 
@@ -75,7 +85,7 @@ def matchImages_BF_Matcher(des_request, des_cache):
 	"""
 
 	bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-	matches = bf.match(des1, des2)
+	matches = bf.match(des_request, des_cache)
 	matches = sorted(matches, key = lambda x:x.distance)
 
 	good = []
@@ -103,18 +113,20 @@ def matchImages_FLANN(des_request, des_cache):
 		multi_probe_level=2)
 
 
-    search_params = {}
-    flann = cv2.FlannBasedMatcher(index_params, search_params)
-    matches = flann.knnMatch(des1, des2, k=2)
+	search_params = {}
+	flann = cv2.FlannBasedMatcher(index_params, search_params)
+	matches = flann.knnMatch(des_request, des_cache, k=2)
 
-	good = [] #storage only good feature, that satisfies a threshold distance criteria
-	for m,n in matches:
-		if m.distance < config.GOOD_FEATURE_RATIO*n.distance:
-			good.append([m])
+	print(matches)
+
+	#good = [] #storage only good feature, that satisfies a threshold distance criteria
+	#for m,n in matches:
+	#	if m.distance < config.GOOD_FEATURE_RATIO*n.distance:
+	#		good.append([m])
 
 
-	if len(good) > config.MIN_MATCHES:
-		return True
+	#if len(good) > config.MIN_MATCHES:
+	#	return True
 
 	return False
 

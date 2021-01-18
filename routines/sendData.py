@@ -24,7 +24,7 @@ def sendImg(url:str, imgFile, fileName:str):
 		print(err.args)
 
 	else:
-		print("Upload Achieved")
+		print("Upload Achieved of " + fileName)
 
 
 def sendJson(url:str, jsonData:dict):
